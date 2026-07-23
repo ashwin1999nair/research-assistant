@@ -1,0 +1,13 @@
+langgraph
+langchain
+langchain-google-genai
+langchain-core
+tavily-python
+beautifulsoup4
+requests
+chromadb
+sentence-transformers
+fastapi
+uvicorn
+streamlit
+python-dotenv
