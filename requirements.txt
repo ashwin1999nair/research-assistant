@@ -2,6 +2,8 @@ langgraph
 langchain
 langchain-google-genai
 langchain-core
+langchain-text-splitters
+langchain-huggingface
 tavily-python
 beautifulsoup4
 requests
