@@ -13,3 +13,4 @@ fastapi
 uvicorn
 streamlit
 python-dotenv
+pytest
