@@ -12,9 +12,9 @@ class ResearchResponse(BaseModel):
     report: str
     urls: list
 
-@app.get("\health")
+@app.get("/health")
 def health_check():
-    return {"status", "running"}
+    return {"status": "running"}
 
 @app.post("/research", response_model=ResearchResponse)
 def run_research(request: ResearchRequest):
