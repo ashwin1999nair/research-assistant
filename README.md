@@ -1,179 +1,203 @@
 # AI Research Assistant
 
-An end-to-end multi-agent AI system that takes a research topic, searches the web, scrapes relevant pages, stores content in a vector database, and generates a structured research report using Google Gemini. Built as a portfolio project to demonstrate multi-agent orchestration, RAG pipelines, and full-stack ML application development.
+A multi-agent research pipeline that takes a topic, searches the web, scrapes and indexes the results, and generates a structured report grounded in the retrieved sources.
+
+Built to explore agent orchestration, retrieval-augmented generation, and container deployment on a managed cloud runtime.
+
+<!-- Add your demo GIF here:
+![Demo](docs/demo.gif)
+-->
 
 ---
 
-## What It Does
+## What it does
 
-1. User inputs a research topic via the Streamlit UI
-2. Orchestrator (LangGraph) coordinates the agent pipeline
-3. Search Agent calls Tavily API and retrieves 5 relevant URLs
-4. Scraper Agent fetches each URL and extracts clean text using BeautifulSoup
-5. Text is chunked using LangChain's RecursiveCharacterTextSplitter (chunk_size=500, overlap=50)
-6. Chunks are embedded using HuggingFace sentence-transformers and stored in ChromaDB
-7. Synthesis Agent queries ChromaDB for the top 10 most relevant chunks
-8. Google Gemini generates a structured research report from the retrieved chunks
-9. FastAPI serves the report and sources
-10. Streamlit displays the report with citations
+1. **Search** — takes a topic and queries the Tavily API, returning 5 candidate URLs
+2. **Scrape** — fetches and extracts readable text from each page with BeautifulSoup
+3. **Index** — splits the scraped text into chunks, embeds them locally, and stores them in a vector database
+4. **Synthesise** — retrieves the 10 most relevant chunks for the topic and generates a structured report with Gemini
+5. **Serve** — FastAPI exposes the pipeline; Streamlit provides the interface
 
----
-
-## Why RAG is Genuine Here
-
-Multiple web pages are scraped per query — too long to fit in an LLM context window directly. Chunking and ChromaDB retrieval ensures only the most relevant sections reach Gemini. This is real RAG: external documents retrieved at runtime, chunked, embedded, similarity-searched, then passed to the LLM for grounded generation.
+The retrieval step is doing real work here: the combined scraped text from five pages routinely exceeds the model's usable context, so only the relevant chunks reach the LLM.
 
 ---
 
 ## Architecture
 
 ```
-User (Browser)
-     │
-     ▼
-Streamlit Frontend (Port 8501)
-     │  HTTP POST /research
-     ▼
-FastAPI Backend (Port 8000)
-     │
-     ▼
-LangGraph Orchestrator
-     │
-     ├── Search Node → Tavily API → URLs
-     │
-     ├── Scraper Node → BeautifulSoup → Raw Text
-     │
-     └── Synthesis Node
-              │
-              ├── LangChain Text Splitter → Chunks
-              ├── HuggingFace Embeddings → Vectors
-              ├── ChromaDB → Store + Similarity Search
-              └── Gemini API → Structured Report
+                    ┌─────────────┐
+   User ──────────► │  Streamlit  │  (external ingress, public HTTPS)
+                    └──────┬──────┘
+                           │  HTTP
+                    ┌──────▼──────┐
+                    │   FastAPI   │  (internal ingress, not public)
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────────────────────────┐
+                    │       LangGraph workflow        │
+                    │                                 │
+                    │  Search ──► Scrape ──► Synthesis│
+                    │  (Tavily)   (BS4)      (Gemini) │
+                    └──────┬──────────────────┬───────┘
+                           │                  │
+                    ┌──────▼──────┐    ┌──────▼──────┐
+                    │  ChromaDB   │◄───│  MiniLM     │
+                    │ (vectors)   │    │ (embeddings)│
+                    └─────────────┘    └─────────────┘
 ```
+
+**Why two containers:** the API and the UI have completely different dependency footprints. Keeping them separate means the UI image ships without PyTorch — 183 MB instead of 3.17 GB.
 
 ---
 
-## Tech Stack
+## Stack
 
 | Layer | Technology |
 |---|---|
-| Agent Orchestration | LangGraph |
-| Web Search | Tavily API |
-| Web Scraping | BeautifulSoup + requests |
-| Text Splitting | LangChain RecursiveCharacterTextSplitter |
-| Embeddings | HuggingFace sentence-transformers (all-MiniLM-L6-v2) |
-| Vector Storage | ChromaDB (local) |
-| LLM | Google Gemini 2.5 Flash |
-| API Layer | FastAPI |
-| Frontend | Streamlit |
+| Orchestration | LangGraph |
+| Search | Tavily API |
+| Scraping | BeautifulSoup + requests |
+| Chunking | LangChain `RecursiveCharacterTextSplitter` (size 500, overlap 50) |
+| Embeddings | HuggingFace `sentence-transformers/all-MiniLM-L6-v2` (local, CPU) |
+| Vector store | ChromaDB |
+| Generation | Google Gemini 2.5 Flash |
+| API | FastAPI |
+| UI | Streamlit |
 | Containerisation | Docker + Docker Compose |
+| CI | GitHub Actions + pytest |
+| Cloud | Azure Container Apps |
 
 ---
 
-## How to Run Locally
-
-### Without Docker
-
-**1. Clone the repo**
-```bash
-git clone https://github.com/ashwin1999nair/research-assistant
-cd research-assistant
-```
-
-**2. Create and activate a virtual environment**
-```bash
-python -m venv venv
-venv\Scripts\activate  # Windows
-```
-
-**3. Install dependencies**
-```bash
-python -m pip install -r requirements.txt
-```
-
-**4. Add your API keys**
-
-Create a `.env` file in the project root:
-```
-GEMINI_API_KEY=your_gemini_key_here
-TAVILY_API_KEY=your_tavily_key_here
-```
-
-**5. Run FastAPI**
-```bash
-uvicorn main:app --reload
-```
-
-**6. Run Streamlit (new terminal)**
-```bash
-streamlit run app.py
-```
-
-Visit `http://localhost:8501`
-
----
-
-### With Docker
-
-**1. Add your API keys to `.env` (same as above)**
-
-**2. Build and run**
-```bash
-docker-compose up --build
-```
-
-Visit `http://localhost:8501`
-
----
-
-## Project Structure
+## Project structure
 
 ```
 research-assistant/
 ├── agents/
-│   ├── __init__.py
-│   ├── search_agent.py       # Tavily API search
-│   ├── scraper_agent.py      # BeautifulSoup web scraping
-│   └── synthesis_agent.py    # ChromaDB query + Gemini report generation
+│   ├── search_agent.py       # Tavily query, returns URLs
+│   ├── scraper_agent.py      # fetches and extracts page text
+│   └── synthesis_agent.py    # retrieves chunks, calls Gemini
 ├── graph/
-│   ├── __init__.py
-│   └── workflow.py           # LangGraph state + agent pipeline
-├── vectorstore.py            # Chunking, embedding, ChromaDB storage + retrieval
-├── main.py                   # FastAPI app — /health and /research endpoints
-├── app.py                    # Streamlit frontend
-├── Dockerfile.api            # FastAPI container
-├── Dockerfile.streamlit      # Streamlit container
-├── docker-compose.yml        # Runs both containers together
-├── requirements.txt          # Python dependencies
-└── .env                      # API keys (not committed to Git)
+│   └── workflow.py           # LangGraph state machine wiring the agents
+├── vectorstore.py            # chunking, embedding, ChromaDB interface
+├── main.py                   # FastAPI app
+├── app.py                    # Streamlit UI
+├── conftest.py               # pytest path resolution
+├── tests/
+├── Dockerfile.api
+├── Dockerfile.streamlit
+├── docker-compose.yml
+├── requirements.txt          # API dependencies
+└── requirements-ui.txt       # UI dependencies (streamlit + requests only)
 ```
 
 ---
 
-## Example Output
+## Running locally
 
-**Topic:** Quantum Computing
+**Prerequisites:** Docker Desktop, a Tavily API key, a Google Gemini API key.
 
-**Sources:**
-- https://en.wikipedia.org/wiki/Quantum_computing
-- https://www.ibm.com/think/topics/quantum-computing
-- https://aws.amazon.com/what-is/quantum-computing/
+```bash
+git clone https://github.com/ashwin1999nair/research-assistant.git
+cd research-assistant
+```
 
-**Report sections:** Overview, Key Concepts, Current Developments, Applications, Conclusion
+Create a `.env` file in the project root:
+
+```
+GEMINI_API_KEY=your_key_here
+TAVILY_API_KEY=your_key_here
+```
+
+Then:
+
+```bash
+docker-compose up --build
+```
+
+- UI: http://localhost:8501
+- API docs: http://localhost:8000/docs
+- Health check: http://localhost:8000/health
+
+A query takes roughly 1–2 minutes. Most of that is CPU embedding of the scraped text.
 
 ---
 
-## Performance Note
+## Configuration
 
-Embedding runs locally on CPU using HuggingFace sentence-transformers. Expect 1-2 minutes per query depending on hardware. This is a known trade-off for using free, local embeddings without an API call.
+The Streamlit container reads the API address from an environment variable, so the same image runs locally and in the cloud without code changes:
+
+```python
+API_URL = os.getenv("API_URL", "http://localhost:8000")
+```
+
+`docker-compose.yml` sets `API_URL=http://api:8000` for local runs. In the cloud deployment it points at the API's internal address.
+
+API keys are never baked into images. Locally they come from `.env` (gitignored, and excluded from the build context by `.dockerignore`); in the cloud they come from platform-managed secrets.
 
 ---
 
-## Future Improvements
+## Testing
 
-- Deployment to Railway or Render
-- GPU-accelerated embeddings for faster processing
-- PDF export of generated reports
-- Support for custom URLs as input sources
-- Persistent ChromaDB storage across sessions
-- Streaming response so users see the report as it generates
+```bash
+pytest
+```
+
+7 unit tests, run automatically on every push via GitHub Actions:
+- 4 covering the scraper's text extraction and error handling
+- 3 covering the chunking logic
+
+These cover the deterministic parts of the pipeline. The LLM-dependent paths are not currently under test — see limitations.
+
+---
+
+## Cloud deployment
+
+Deployed to **Azure Container Apps** (Sweden Central) as a demonstration of a managed-runtime deployment model.
+
+**How it works:**
+- Images are built locally, tagged, and pushed to Azure Container Registry
+- Container Apps pulls from ACR using a **user-assigned managed identity** with the `AcrPull` role — no registry username or password is stored anywhere
+- The FastAPI container uses **internal ingress** and is unreachable from the public internet
+- The Streamlit container uses **external ingress** and gets a public HTTPS endpoint with a managed TLS certificate
+- API keys are stored as Container Apps secrets and injected as environment variables via `secretref`
+- Both containers run with `min-replicas 0`, so they scale to zero when idle
+
+**Why this approach over a VM:** building the image on the server, as in a typical VM deployment, means the production artifact isn't reproducible. Building locally and pushing to a registry means every environment pulls the same immutable image, and rolling back is a matter of pointing at an earlier tag.
+
+Deployment notes, including the full command sequence and the problems encountered, are in [`docs/azure-deployment.md`](docs/azure-deployment.md).
+
+---
+
+## Limitations
+
+Stated plainly, because they're design consequences rather than oversights:
+
+**Storage is ephemeral.** Container Apps filesystems don't survive a restart, so the vector store is rebuilt on every query. This suits the current design — each query researches fresh sources — but it means no caching, no corpus accumulating over time, and every query paying the full embedding cost. Persistence would need a mounted volume or a hosted vector database.
+
+**Cold starts are slow.** With scale-to-zero, the first request after an idle period waits for a 3.17 GB image pull and the embedding model to load. Combined with the normal 1–2 minute query time, the first request can take several minutes.
+
+**Embedding runs on CPU.** `all-MiniLM-L6-v2` is small, but embedding several pages of scraped text single-threaded is the dominant cost in a query.
+
+**Scraping is sequential.** The five URLs are fetched one after another rather than concurrently.
+
+**No evaluation harness yet.** There is no systematic measurement of report quality, source grounding, or retrieval relevance. This is the next planned piece of work.
+
+**Scraping is best-effort.** JavaScript-rendered pages, paywalls, and aggressive bot protection all reduce the amount of usable text retrieved.
+
+---
+
+## Planned next steps
+
+- A fixed evaluation set with automated scoring for source grounding, citation rate, and length adherence
+- MLflow experiment tracking to compare chunk size, retrieval depth, and prompt variants against those metrics
+- Concurrent scraping and batched embedding to cut query latency
+- Semantic caching to avoid re-running the full pipeline on repeated topics
+- Input validation and retry-with-backoff on upstream API failures
+
+---
+
+## Author
+
+**Ashwin Nair** — MSc Artificial Intelligence, University of Galway
+[GitHub](https://github.com/ashwin1999nair)
