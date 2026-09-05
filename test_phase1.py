@@ -5,11 +5,11 @@ app=build_graph()
 result=app.invoke({
     "topic": "quantum computing",
     "urls": [],
-    "raw_texts": [],
+    "scraped": [],
     "report": ""
 })
 
 print("URLs found:", result["urls"])
-print("\nNumber of pages scraped:", len(result["raw_texts"]))
+print("Number of pages scraped:", len(result["scraped"]))
 print("\nFirst 500 chars of first page:")
-print(result["raw_texts"][0][:500] if result["raw_texts"] else "No text scraped")
+print(result["scraped"][0]["text"][:500] if result["scraped"] else "No text scraped")

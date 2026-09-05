@@ -7,8 +7,9 @@ from agents.synthesis_agent import synthesis_node
 class AgentState(TypedDict):
     topic: str
     urls: List[str]
-    raw_texts: List[str]
+    scraped: List[dict]
     report: str
+    retrieved_chunks: List[str]
 
 def build_graph():
     graph=StateGraph(AgentState)

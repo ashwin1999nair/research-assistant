@@ -5,8 +5,7 @@ def scraper_node(state: dict) -> dict:
     """Reads URL from the state. Fetches each URL and extracts clean text. Returns raw_texts to be added to the state"""
 
     urls=state["urls"]
-    raw_texts=[]
-
+    scraped = []
     for url in urls:
         try:
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -21,10 +20,10 @@ def scraper_node(state: dict) -> dict:
             text=soup.get_text(separator="\n", strip=True)
 
             if text:
-                raw_texts.append(text)
+                scraped.append({"url": url, "text": text})  
 
         except Exception as e:
             print(f"Failed to scrape {url}: {e}")
             continue
 
-    return {"raw_texts": raw_texts}
+    return {"scraped": scraped}

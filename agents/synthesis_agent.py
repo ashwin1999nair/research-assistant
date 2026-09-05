@@ -11,17 +11,17 @@ def synthesis_node(state: dict) -> dict:
      """Reads raw_texts and topic from state.Stores chunks in ChromaDB.Queries for relevant chunks.Sends to Gemini for report generation.
         Returns report to state."""
      topic=state["topic"]
-     raw_texts=state["raw_texts"]
+     scraped = state["scraped"]
 
      ## Store Collection in ChromeDB
-     collection=store_chunks(raw_texts, topic)
+     collection = store_chunks(scraped, topic)
 
      ## Query for relevant chunks
      relevant_chunks=query_chunks(collection, topic, n_results=10)
 
      ## Combine Chunks into context
-     context="\n\n".join(relevant_chunks)
-
+     context = "\n\n".join(c["text"] for c in relevant_chunks)
+     
      ## Prompt
      prompt = f"""You are a research assistant. Based on the following retrieved content, write a structured research report on the topic: {topic}
 
@@ -40,4 +40,4 @@ def synthesis_node(state: dict) -> dict:
      ## Call Gemini
      response=llm.invoke(prompt)
 
-     return {"report": response.content}
+     return {"report": response.content, "retrieved_chunks": relevant_chunks}

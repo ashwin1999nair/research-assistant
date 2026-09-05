@@ -5,8 +5,9 @@ app=build_graph()
 result=app.invoke({
     "topic": "quantum computing",
     "urls": [],
-    "raw_texts":[],
-    "report": ""
+    "scraped":[],
+    "report": "",
+    "retrieved_chunks": []
 })
 
 print("Report:")
