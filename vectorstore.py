@@ -48,5 +48,3 @@ def query_chunks(collection: chromadb.Collection, topic: str, n_results: int=10)
     {"text": doc, "source": meta["source"]}
     for doc, meta in zip(results["documents"][0], results["metadatas"][0])
 ]
-
-
