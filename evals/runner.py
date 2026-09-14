@@ -77,7 +77,7 @@ def run_case(case:dict, api_url:str, timeout:int)-> dict:
             "error": f"{type(e).__name__}: {e}",
         }
 
-def score_case(case:dict, result:dict)->dict:
+def score_case(case: dict, result: dict, use_llm: bool = False) -> dict:
     """
     Apply the applicable scorers and decide whether the case passed overall.
  
@@ -90,7 +90,7 @@ def score_case(case:dict, result:dict)->dict:
         "category": case["category"],
         "expected": case["expected_behaviour"],
     }
-    scores=[scorer(case, result) for scorer in scorers_for(case)]
+    scores = [scorer(case, result) for scorer in scorers_for(case, use_llm)]
     for s in scores:
         row[s["name"]]=s["value"]
 
@@ -129,6 +129,7 @@ def aggregate(rows: list) -> dict:
         "pass_rate": pct_passed(rows),
         "mean_word_count": mean_of("word_count"),
         "mean_source_diversity": mean_of("source_diversity"),
+        "mean_faithfulness": mean_of("faithfulness"),
         "mean_latency_s": mean_of("latency_s"),
         "n_errors": sum(1 for r in rows if r["error"]),
     }
@@ -207,6 +208,8 @@ def main():
     parser.add_argument("--only", help="Run a single case id (wd_01) or category (narrow)")
     parser.add_argument("--api-url", default="http://localhost:8000")
     parser.add_argument("--timeout", type=int, default=400)
+    parser.add_argument("--llm-scorers", action="store_true",
+                    help="Run LLM-judged scorers (costs API calls)")
     args = parser.parse_args()
  
     with open(TEST_SET, encoding="utf-8") as f:
@@ -228,11 +231,11 @@ def main():
         print(f"[{i}/{len(cases)}] {case['id']:<10} {label}", flush=True)
  
         result = run_case(case, args.api_url, args.timeout)
-        row = score_case(case, result)
+        row = score_case(case, result, args.llm_scorers)
         rows.append(row)
  
         status = "pass" if row["passed"] else "FAIL"
-        print(f"           -> {status}  ({result['latency_s']:.0f}s)", flush=True)
+        print(f"-> {status}  ({result['latency_s']:.0f}s)", flush=True)
  
     metrics = aggregate(rows)
     config = {

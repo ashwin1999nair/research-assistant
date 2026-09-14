@@ -1,3 +1,4 @@
+from evals.llm_scorers import faithfulness
 """
 Deterministic scorers for the Research Assistant eval harness.
  
@@ -72,11 +73,13 @@ def check_absent(case:dict, result:dict)-> dict:
 # -------------------------------------------------------------------
 GENERAL = [completed, word_count, source_diversity, latency_s]
 
-def scorers_for(case: dict) -> list:
+def scorers_for(case: dict, use_llm: bool = False) -> list:
     if case.get("expected_behaviour") == "rejected":
         chosen = [completed]
     else:
         chosen = list(GENERAL)
+        if use_llm:
+            chosen.append(faithfulness)
 
     if "check_fact" in case:
         chosen.append(check_fact)
