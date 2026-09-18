@@ -9,6 +9,11 @@ graph=build_graph()
 class ResearchRequest(BaseModel):
     topic: str
     debug: bool = False
+    n_urls: int = 5
+    chunk_size: int = 500
+    chunk_overlap: int = 50
+    n_results: int = 10
+    temperature: float = 0.3
 
 class ResearchResponse(BaseModel):
     report: str
@@ -26,7 +31,12 @@ def run_research(request: ResearchRequest):
         "urls": [],
         "scraped": [],
         "report": "",
-        "retrieved_chunks": []
+        "retrieved_chunks": [],
+        "n_urls": request.n_urls,
+        "chunk_size": request.chunk_size,
+        "chunk_overlap": request.chunk_overlap,
+        "n_results": request.n_results,
+        "temperature": request.temperature,
     })
 
     return ResearchResponse(

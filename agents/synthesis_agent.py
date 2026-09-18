@@ -5,19 +5,26 @@ from vectorstore import store_chunks, query_chunks
 
 load_dotenv()
 
-llm=ChatGoogleGenerativeAI(model='gemini-2.5-flash', google_api_key=os.getenv("GEMINI_API_KEY"), temperature=0.3)
-
 def synthesis_node(state: dict) -> dict:
-     """Reads raw_texts and topic from state.Stores chunks in ChromaDB.Queries for relevant chunks.Sends to Gemini for report generation.
-        Returns report to state."""
+     """Reads scraped pages and topic from state. Stores chunks in ChromaDB. Queries for relevant chunks.
+        Sends to Gemini for report generation. Returns report and retrieved chunks to state."""
      topic=state["topic"]
      scraped = state["scraped"]
 
-     ## Store Collection in ChromeDB
-     collection = store_chunks(scraped, topic)
+     ## Config, with defaults for callers that don't supply them
+     chunk_size=state.get("chunk_size", 500)
+     chunk_overlap=state.get("chunk_overlap", 50)
+     n_results=state.get("n_results", 10)
+     temperature=state.get("temperature", 0.3)
+
+     ## Built per request so temperature is configurable
+     llm=ChatGoogleGenerativeAI(model='gemini-2.5-flash',google_api_key=os.getenv("GEMINI_API_KEY"),temperature=temperature,)
+
+     ## Store Collection in ChromaDB
+     collection = store_chunks(scraped, topic, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
      ## Query for relevant chunks
-     relevant_chunks=query_chunks(collection, topic, n_results=10)
+     relevant_chunks=query_chunks(collection, topic, n_results=n_results)
 
      ## Combine Chunks into context
      context = "\n\n".join(c["text"] for c in relevant_chunks)

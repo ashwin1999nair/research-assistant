@@ -9,7 +9,12 @@ class AgentState(TypedDict):
     urls: List[str]
     scraped: List[dict]
     report: str
-    retrieved_chunks: List[str]
+    retrieved_chunks: List[dict]
+    n_urls: int
+    chunk_size: int
+    chunk_overlap: int
+    n_results: int
+    temperature: float
 
 def build_graph():
     graph=StateGraph(AgentState)

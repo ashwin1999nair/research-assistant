@@ -22,6 +22,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 import requests
+import mlflow
 
 from evals.scorers import scorers_for
 
@@ -33,10 +34,13 @@ RESULTS_DIR = HERE / "results"
 # Running one case
 # ---------------------------------------------------------------------
  
-def run_case(case:dict, api_url:str, timeout:int)-> dict:
+def run_case(case: dict, api_url: str, timeout: int, cfg: dict) -> dict:
     """
     Call the API for one case and build the result dict the scorers expect.
- 
+
+    cfg holds the pipeline config (chunk_size, n_results, temperature, etc.)
+    and is unpacked into the request body.
+
     The API returns report / urls / retrieved_chunks. We add latency_s and
     error ourselves — the API doesn't time itself, and a crash needs to be
     recorded as a data point rather than ending the whole run.
@@ -46,7 +50,7 @@ def run_case(case:dict, api_url:str, timeout:int)-> dict:
     try:
         response = requests.post(
             f"{api_url}/research",
-            json={"topic": case["query"], "debug": True},
+            json={"topic": case["query"], "debug": True, **cfg},
             timeout=timeout,
         )
         elapsed = time.time() - start
@@ -138,6 +142,7 @@ def aggregate(rows: list) -> dict:
     if latencies:
         idx = min(int(len(latencies) * 0.95), len(latencies) - 1)
         metrics["p95_latency_s"] = round(latencies[idx], 1)
+        metrics["median_latency_s"] = round(statistics.median(latencies), 1)
 
     for cat in sorted({r["category"] for r in rows}):
         subset = [r for r in rows if r["category"] == cat]
@@ -210,6 +215,13 @@ def main():
     parser.add_argument("--timeout", type=int, default=400)
     parser.add_argument("--llm-scorers", action="store_true",
                     help="Run LLM-judged scorers (costs API calls)")
+    parser.add_argument("--n-urls", type=int, default=5)
+    parser.add_argument("--chunk-size", type=int, default=500)
+    parser.add_argument("--chunk-overlap", type=int, default=50)
+    parser.add_argument("--n-results", type=int, default=10)
+    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--no-mlflow", action="store_true",
+                        help="Skip MLflow logging")
     args = parser.parse_args()
  
     with open(TEST_SET, encoding="utf-8") as f:
@@ -224,31 +236,60 @@ def main():
  
     print(f"Running {len(cases)} case(s) against {args.api_url}")
     print(f"Estimated time: {len(cases) * 1.5:.0f}-{len(cases) * 2:.0f} minutes\n")
- 
-    rows = []
-    for i, case in enumerate(cases, 1):
-        label = case["query"][:45] or "(empty)"
-        print(f"[{i}/{len(cases)}] {case['id']:<10} {label}", flush=True)
- 
-        result = run_case(case, args.api_url, args.timeout)
-        row = score_case(case, result, args.llm_scorers)
-        rows.append(row)
- 
-        status = "pass" if row["passed"] else "FAIL"
-        print(f"-> {status}  ({result['latency_s']:.0f}s)", flush=True)
- 
-    metrics = aggregate(rows)
-    config = {
-        "test_set_version": test_set.get("version"),
-        "api_url": args.api_url,
-        "filter": args.only,
-        "timestamp": datetime.now().isoformat(timespec="seconds"),
+
+    cfg = {
+        "n_urls": args.n_urls,
+        "chunk_size": args.chunk_size,
+        "chunk_overlap": args.chunk_overlap,
+        "n_results": args.n_results,
+        "temperature": args.temperature,
     }
- 
-    print_summary(rows, metrics)
-    run_dir = write_results(rows, metrics, config)
-    print(f"\nWritten to {run_dir}")
- 
+
+    run_meta = {
+        **cfg,
+        "test_set_version": test_set.get("version"),
+        "llm_scorers": args.llm_scorers,
+        "filter": args.only or "all",
+        "n_cases": len(cases),
+    }
+
+    mlflow.set_tracking_uri(f"sqlite:///{(HERE / 'mlflow.db').as_posix()}")
+    mlflow.set_experiment("research-assistant-eval")
+
+    use_mlflow = not args.no_mlflow
+
+    if use_mlflow:
+        mlflow.start_run()
+        mlflow.log_params(run_meta)
+
+    try:
+        rows = []
+        for i, case in enumerate(cases, 1):
+            label = case["query"][:45] or "(empty)"
+            print(f"[{i}/{len(cases)}] {case['id']:<10} {label}", flush=True)
+
+            result = run_case(case, args.api_url, args.timeout, cfg)
+            row = score_case(case, result, args.llm_scorers)
+            rows.append(row)
+
+            status = "pass" if row["passed"] else "FAIL"
+            print(f" -> {status}  ({result['latency_s']:.0f}s)", flush=True)
+
+        metrics = aggregate(rows)
+        print_summary(rows, metrics)
+        run_dir = write_results(rows, metrics, run_meta)
+        print(f"\nWritten to {run_dir}")
+
+        if use_mlflow:
+            # log_metrics rejects None — mean_of returns None when no rows
+            # have that key (e.g. mean_faithfulness without --llm-scorers)
+            mlflow.log_metrics({k: v for k, v in metrics.items() if v is not None})
+            mlflow.log_artifacts(str(run_dir))
+            print(f"Logged to MLflow run {mlflow.active_run().info.run_id[:8]}")
+
+    finally:
+        if use_mlflow:
+            mlflow.end_run() 
  
 if __name__ == "__main__":
     main()
