@@ -61,6 +61,7 @@ def run_case(case: dict, api_url: str, timeout: int, cfg: dict) -> dict:
                 "urls": [],
                 "retrieved_chunks": [],
                 "latency_s": elapsed,
+                "status_code": response.status_code,
                 "error": f"HTTP {response.status_code}: {response.text[:200]}",
             }
         data=response.json()
@@ -69,6 +70,7 @@ def run_case(case: dict, api_url: str, timeout: int, cfg: dict) -> dict:
             "urls": data.get("urls") or [],
             "retrieved_chunks": data.get("retrieved_chunks") or [],
             "latency_s": elapsed,
+            "status_code": 200,  
             "error": None,
         }
 
@@ -78,6 +80,7 @@ def run_case(case: dict, api_url: str, timeout: int, cfg: dict) -> dict:
             "urls": [],
             "retrieved_chunks": [],
             "latency_s": time.time() - start,
+            "status_code": None,
             "error": f"{type(e).__name__}: {e}",
         }
 
@@ -98,16 +101,17 @@ def score_case(case: dict, result: dict, use_llm: bool = False) -> dict:
     for s in scores:
         row[s["name"]]=s["value"]
 
-    got_report=result["error"] is None and bool(result["report"])
-
-    if case["expected_behaviour"]== "rejected":
-        # Wanted a rejection. Getting a report means the guardrail is missing.
-        row["passed"]=not got_report
+    if case["expected_behaviour"] == "rejected":
+        # Only a 4xx counts as a correct rejection.
+        # 5xx = crashed, 200 = no guardrail, None = never reached the API.
+        code = result.get("status_code")
+        row["passed"] = code is not None and 400 <= code < 500
     else:
         # Wanted a report. Every applicable scorer must pass.
         row["passed"] = all(s["passed"] for s in scores)
 
-    row["error"]=result["error"] or ""
+    row["status_code"] = result.get("status_code")
+    row["error"] = result["error"] or ""
     return row
 
 # ---------------------------------------------------------------------
@@ -135,7 +139,7 @@ def aggregate(rows: list) -> dict:
         "mean_source_diversity": mean_of("source_diversity"),
         "mean_faithfulness": mean_of("faithfulness"),
         "mean_latency_s": mean_of("latency_s"),
-        "n_errors": sum(1 for r in rows if r["error"]),
+        "n_errors": sum(1 for r in rows if r["error"] and r["expected"] != "rejected"),
     }
 
     latencies = sorted(r["latency_s"] for r in rows if isinstance(r.get("latency_s"), (int, float)))

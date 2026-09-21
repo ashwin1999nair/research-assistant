@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from graph.workflow import build_graph
 
@@ -7,13 +7,20 @@ app=FastAPI()
 graph=build_graph()
 
 class ResearchRequest(BaseModel):
-    topic: str
+    topic: str = Field(min_length=3, max_length=200)
     debug: bool = False
-    n_urls: int = 5
-    chunk_size: int = 500
-    chunk_overlap: int = 50
-    n_results: int = 10
-    temperature: float = 0.3
+    n_urls: int = Field(default=5, ge=1, le=10)
+    chunk_size: int = Field(default=500, ge=100, le=4000)
+    chunk_overlap: int = Field(default=50, ge=0, le=500)
+    n_results: int = Field(default=10, ge=1, le=50)
+    temperature: float = Field(default=0.3, ge=0.0, le=2.0)
+
+    @field_validator("topic")
+    @classmethod
+    def topic_not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("topic cannot be blank")
+        return v.strip()
 
 class ResearchResponse(BaseModel):
     report: str

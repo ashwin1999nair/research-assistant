@@ -18,8 +18,8 @@ def synthesis_node(state: dict) -> dict:
      temperature=state.get("temperature", 0.3)
 
      ## Built per request so temperature is configurable
-     llm=ChatGoogleGenerativeAI(model='gemini-2.5-flash',google_api_key=os.getenv("GEMINI_API_KEY"),temperature=temperature,)
-
+     llm = ChatGoogleGenerativeAI(model='gemini-2.5-flash',google_api_key=os.getenv("GEMINI_API_KEY"),
+         temperature=temperature,max_retries=3,)
      ## Store Collection in ChromaDB
      collection = store_chunks(scraped, topic, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
