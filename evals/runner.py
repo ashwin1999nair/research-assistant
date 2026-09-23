@@ -50,7 +50,7 @@ def run_case(case: dict, api_url: str, timeout: int, cfg: dict) -> dict:
     try:
         response = requests.post(
             f"{api_url}/research",
-            json={"topic": case["query"], "debug": True, **cfg},
+            json={"topic": case["query"], "debug": True, "no_cache": True, **cfg},
             timeout=timeout,
         )
         elapsed = time.time() - start

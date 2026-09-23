@@ -1,4 +1,5 @@
 import os
+import time
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from vectorstore import store_chunks, query_chunks
@@ -21,10 +22,14 @@ def synthesis_node(state: dict) -> dict:
      llm = ChatGoogleGenerativeAI(model='gemini-2.5-flash',google_api_key=os.getenv("GEMINI_API_KEY"),
          temperature=temperature,max_retries=3,)
      ## Store Collection in ChromaDB
+     t = time.time()
      collection = store_chunks(scraped, topic, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+     print(f"[timing] embed+store: {time.time() - t:.1f}s", flush=True)
 
      ## Query for relevant chunks
+     t = time.time()
      relevant_chunks=query_chunks(collection, topic, n_results=n_results)
+     print(f"[timing] retrieve: {time.time() - t:.1f}s", flush=True)
 
      ## Combine Chunks into context
      context = "\n\n".join(c["text"] for c in relevant_chunks)
@@ -45,6 +50,8 @@ def synthesis_node(state: dict) -> dict:
      Be factual and base your report only on the provided content."""
 
      ## Call Gemini
+     t = time.time()
      response=llm.invoke(prompt)
-
+     print(f"[timing] gemini: {time.time() - t:.1f}s", flush=True)
+     
      return {"report": response.content, "retrieved_chunks": relevant_chunks}
