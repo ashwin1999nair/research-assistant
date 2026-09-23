@@ -51,7 +51,7 @@ def run_research(request: ResearchRequest):
         "scraped": [],
         "report": "",
         "retrieved_chunks": [],
-        "n_urls": request.n_urls,
+        "n_urls": request.n_urls, 
         "chunk_size": request.chunk_size,
         "chunk_overlap": request.chunk_overlap,
         "n_results": request.n_results,
