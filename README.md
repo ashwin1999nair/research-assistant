@@ -1,5 +1,7 @@
 # AI Research Assistant
 
+![CI](https://github.com/ashwin1999nair/research-assistant/actions/workflows/ci.yml/badge.svg)
+
 A multi-agent research pipeline that takes a topic, searches the web, scrapes and indexes the results, and generates a structured report grounded in the retrieved sources.
 
 Built to explore agent orchestration, retrieval-augmented generation, systematic evaluation, and container deployment on a managed cloud runtime.
